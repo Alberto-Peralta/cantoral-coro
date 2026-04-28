@@ -1,0 +1,75 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Animaciones ── */
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.3s ease-out both;
+}
+
+.animate-slide-up {
+  animation: slide-up 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* ── Scrollbar oculta (para filtros) ── */
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
+.scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* ── Tipografía monoespaciada ── */
+pre,
+textarea,
+code {
+  font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+/* ⚠️ IMPORTANTE:
+   Evita redefinir .font-mono de Tailwind directamente.
+   Mejor usa una clase personalizada si necesitas override. */
+
+/* ── Clase personalizada para acordes ── */
+.font-chords {
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+}
+
+/* ── Espaciado de líneas ── */
+.leading-loose {
+  line-height: 2;
+}
+
+/* ── Tap highlight en móvil ── */
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* ── Select en modo oscuro (mejor compatibilidad) ── */
+select {
+  color-scheme: light dark;
+}
