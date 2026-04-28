@@ -3,14 +3,13 @@ import {
   Search, Plus, Music, ChevronRight, ArrowLeft,
   Minus, Plus as PlusIcon, Type, Sun, Moon, Share2,
   Trash2, Pencil, BookOpen, X, Check, AlertCircle,
-  Music2, Bookmark
+  Music2, Bookmark, Download
 } from 'lucide-react';
 import { db, ref, onValue, push, set } from './firebase';
 import { transponerAcorde } from './utils/transposer';
 
 // ─── Constantes ────────────────────────────────────────────────────────────
 const TONOS = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
-const CATEGORIAS = ['Todos', 'Entrada', 'Ordinario', 'Comunión', 'Ofertorio', 'Salida', 'Mariano'];
 const CAT_COLOR = {
   Entrada:   { bg: 'bg-amber-50 dark:bg-amber-900/30',   text: 'text-amber-700 dark:text-amber-300' },
   Ordinario: { bg: 'bg-blue-50 dark:bg-blue-900/30',    text: 'text-blue-700 dark:text-blue-300' },
@@ -20,6 +19,47 @@ const CAT_COLOR = {
   Mariano:   { bg: 'bg-sky-50 dark:bg-sky-900/30',       text: 'text-sky-700 dark:text-sky-300' },
 };
 const DEFAULT_CAT = { bg: 'bg-slate-100 dark:bg-slate-800', text: 'text-slate-500 dark:text-slate-400' };
+
+// ─── Componente de instalación PWA ─────────────────────────────────────────
+const InstallButton = () => {
+  const [deferredPrompt, setDeferredPrompt] = useState(null);
+  const [showInstall, setShowInstall] = useState(false);
+
+  useEffect(() => {
+    const handler = (e) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+      setShowInstall(true);
+    };
+
+    window.addEventListener('beforeinstallprompt', handler);
+    return () => window.removeEventListener('beforeinstallprompt', handler);
+  }, []);
+
+  const handleInstall = async () => {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    if (outcome === 'accepted') {
+      console.log('Usuario instaló la app');
+    }
+    setDeferredPrompt(null);
+    setShowInstall(false);
+  };
+
+  if (!showInstall) return null;
+
+  return (
+    <button
+      onClick={handleInstall}
+      className="fixed bottom-24 right-4 z-50 flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-3 rounded-full shadow-lg transition-all active:scale-95"
+      title="Instalar aplicación"
+    >
+      <Download size={18} />
+      <span className="text-sm font-medium hidden sm:inline">Instalar App</span>
+    </button>
+  );
+};
 
 // ─── Toast ──────────────────────────────────────────────────────────────────
 const Toast = ({ message, type = 'success', onClose }) => {
@@ -39,6 +79,7 @@ const Toast = ({ message, type = 'success', onClose }) => {
 // ─── Badge de categoría ─────────────────────────────────────────────────────
 const CatBadge = ({ cat, small = false }) => {
   const c = CAT_COLOR[cat] || DEFAULT_CAT;
+  if (!cat) return null;
   return (
     <span className={`inline-block rounded-lg font-bold uppercase tracking-widest ${small ? 'text-[9px] px-2 py-0.5' : 'text-[10px] px-2.5 py-1'} ${c.bg} ${c.text}`}>
       {cat}
@@ -51,11 +92,8 @@ const ProcesarLetra = ({ texto, transporte, fontSize }) => {
   if (!texto) return null;
   
   const procesarLinea = (linea, numLinea) => {
-    // Encuentra todos los acordes en la línea
     const acordes = [];
     let textoLimpio = linea;
-    
-    // Extrae los acordes y crea marcadores de posición
     const regex = /\[([^\]]+)\]/g;
     let match;
     let offset = 0;
@@ -71,7 +109,6 @@ const ProcesarLetra = ({ texto, transporte, fontSize }) => {
         original: match[0]
       });
       
-      // Reemplaza [acorde] con espacios para mantener alineación
       const espacios = ' '.repeat(match[0].length);
       textoLimpio = textoLimpio.slice(0, match.index - offset) + espacios + textoLimpio.slice(match.index - offset + match[0].length);
       offset += match[0].length - espacios.length;
@@ -81,12 +118,10 @@ const ProcesarLetra = ({ texto, transporte, fontSize }) => {
       return <div key={numLinea} className="leading-loose">{linea}</div>;
     }
     
-    // Crea la línea superior con acordes
     let lineaAcordes = '';
     let ultimaPos = 0;
     
     for (const acorde of acordes) {
-      // Añade espacios hasta la posición del acorde
       const espaciosNecesarios = acorde.posicion - ultimaPos;
       lineaAcordes += ' '.repeat(Math.max(0, espaciosNecesarios));
       lineaAcordes += acorde.acorde;
@@ -135,6 +170,83 @@ const ConfirmModal = ({ title, message, onConfirm, onCancel }) => (
   </div>
 );
 
+// ─── Componente para gestionar categorías ───────────────────────────────────
+const CategoryManager = ({ categorias, onAdd, onEdit, onDelete, onClose }) => {
+  const [nueva, setNueva] = useState('');
+  const [editando, setEditando] = useState(null);
+  const [editValue, setEditValue] = useState('');
+
+  return (
+    <div className="fixed inset-0 z-[150] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+      <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-md w-full max-h-[80vh] overflow-hidden flex flex-col shadow-2xl">
+        <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center">
+          <div>
+            <h3 className="font-bold text-lg">📂 Gestionar Categorías</h3>
+            <p className="text-xs text-slate-500">Añade, edita o elimina categorías</p>
+          </div>
+          <button onClick={onClose} className="text-slate-400 text-xl">✕</button>
+        </div>
+        
+        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          <div className="space-y-2">
+            {categorias.length === 0 ? (
+              <div className="text-center py-8 text-slate-400">
+                <p>No hay categorías</p>
+                <p className="text-xs mt-1">Agrega una nueva categoría</p>
+              </div>
+            ) : (
+              categorias.map(cat => (
+                <div key={cat} className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800 rounded-xl">
+                  {editando === cat ? (
+                    <input
+                      type="text"
+                      value={editValue}
+                      onChange={(e) => setEditValue(e.target.value)}
+                      className="flex-1 px-3 py-1 bg-white dark:bg-slate-900 border rounded-lg"
+                      autoFocus
+                      onKeyPress={(e) => e.key === 'Enter' && onEdit(cat, editValue) && setEditando(null)}
+                    />
+                  ) : (
+                    <span className="font-medium">{cat}</span>
+                  )}
+                  <div className="flex gap-2">
+                    {editando === cat ? (
+                      <>
+                        <button onClick={() => { onEdit(cat, editValue); setEditando(null); }} className="px-3 py-1 bg-green-600 text-white rounded-lg text-sm">✓</button>
+                        <button onClick={() => setEditando(null)} className="px-3 py-1 bg-red-600 text-white rounded-lg text-sm">✕</button>
+                      </>
+                    ) : (
+                      <>
+                        <button onClick={() => { setEditando(cat); setEditValue(cat); }} className="p-2 text-blue-600 hover:bg-blue-100 dark:hover:bg-blue-900/30 rounded-lg">✏️</button>
+                        <button onClick={() => onDelete(cat)} className="p-2 text-red-600 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-lg">🗑️</button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+          
+          <div className="pt-4 border-t border-slate-200 dark:border-slate-800">
+            <p className="text-sm font-medium mb-2">➕ Agregar nueva categoría</p>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={nueva}
+                onChange={(e) => setNueva(e.target.value)}
+                placeholder="Nombre de la categoría"
+                className="flex-1 px-4 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-blue-500/20"
+                onKeyPress={(e) => e.key === 'Enter' && nueva.trim() && onAdd(nueva) && setNueva('')}
+              />
+              <button onClick={() => { if (nueva.trim()) onAdd(nueva); setNueva(''); }} className="px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition">Agregar</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // ─── Visor de Canto ─────────────────────────────────────────────────────────
 const SongDetail = ({ song, onBack, onEdit, showToast }) => {
   const [fontSize, setFontSize] = useState(17);
@@ -169,8 +281,6 @@ const SongDetail = ({ song, onBack, onEdit, showToast }) => {
       )}
 
       <div className="max-w-3xl mx-auto pb-36 animate-fade-in">
-
-        {/* Barra de navegación */}
         <div className="flex items-center justify-between mb-6">
           <button onClick={onBack} className="flex items-center gap-2 text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 font-bold transition-colors group">
             <div className="p-2 rounded-xl bg-white dark:bg-slate-900 shadow-sm border border-slate-100 dark:border-slate-800 group-hover:-translate-x-1 transition-transform">
@@ -191,18 +301,13 @@ const SongDetail = ({ song, onBack, onEdit, showToast }) => {
           </div>
         </div>
 
-        {/* Tarjeta principal */}
         <div className="bg-white dark:bg-slate-900 rounded-[2rem] border border-slate-100 dark:border-slate-800 shadow-xl shadow-slate-100/50 dark:shadow-none overflow-hidden">
-          
-          {/* Cabecera del canto */}
           <div className="relative px-7 pt-8 pb-7 border-b border-slate-50 dark:border-slate-800 overflow-hidden">
-            {/* Decoración de fondo */}
             <div className="absolute -top-6 -right-6 opacity-[0.04] dark:opacity-[0.06] pointer-events-none">
               <Music2 size={180} />
             </div>
-            
             <div className="relative space-y-3">
-              <CatBadge cat={song.categoria || song.tonoOriginal} />
+              <CatBadge cat={song.categoria} />
               <h2 className="text-3xl md:text-4xl font-black text-slate-900 dark:text-white leading-tight tracking-tight">
                 {song.titulo}
               </h2>
@@ -226,7 +331,6 @@ const SongDetail = ({ song, onBack, onEdit, showToast }) => {
             </div>
           </div>
 
-          {/* Contenido de la letra */}
           <div className="px-7 py-8 overflow-x-auto">
             {song.cuerpo ? (
               <ProcesarLetra texto={song.cuerpo} transporte={transpose} fontSize={fontSize} />
@@ -239,11 +343,8 @@ const SongDetail = ({ song, onBack, onEdit, showToast }) => {
           </div>
         </div>
 
-        {/* Barra de controles flotante */}
         <div className="fixed bottom-5 left-4 right-4 max-w-md mx-auto z-50">
           <div className="bg-slate-950/95 dark:bg-slate-900/98 backdrop-blur-xl rounded-2xl px-5 py-3.5 flex items-center justify-between shadow-2xl border border-white/[0.06]">
-            
-            {/* Control de tono */}
             <div className="flex flex-col items-center gap-1">
               <span className="text-[9px] font-bold uppercase tracking-widest text-slate-500">Tono</span>
               <div className="flex items-center gap-2">
@@ -263,7 +364,6 @@ const SongDetail = ({ song, onBack, onEdit, showToast }) => {
 
             <div className="w-px h-8 bg-white/10" />
 
-            {/* Control de letra */}
             <div className="flex flex-col items-center gap-1">
               <span className="text-[9px] font-bold uppercase tracking-widest text-slate-500">Letra</span>
               <div className="flex items-center gap-3">
@@ -281,7 +381,6 @@ const SongDetail = ({ song, onBack, onEdit, showToast }) => {
 
             <div className="w-px h-8 bg-white/10" />
 
-            {/* Compartir */}
             <button onClick={handleShare}
               className="flex flex-col items-center gap-1 text-slate-400 hover:text-white transition-colors active:scale-90">
               <span className="text-[9px] font-bold uppercase tracking-widest text-slate-500">Enviar</span>
@@ -289,16 +388,15 @@ const SongDetail = ({ song, onBack, onEdit, showToast }) => {
             </button>
           </div>
         </div>
-
       </div>
     </>
   );
 };
 
-// ─── Panel Admin (Nuevo / Editar) ────────────────────────────────────────────
-const AdminPanel = ({ onClose, songToEdit, showToast }) => {
+// ─── Panel Admin (Nuevo / Editar) ───────────────────────────────────────────
+const AdminPanel = ({ onClose, songToEdit, showToast, categorias }) => {
   const [form, setForm] = useState({
-    titulo: '', tonoOriginal: 'G', categoria: 'Ordinario', autor: '', cuerpo: ''
+    titulo: '', tonoOriginal: 'G', categoria: '', autor: '', cuerpo: ''
   });
   const [saving, setSaving] = useState(false);
   const textareaRef = useRef(null);
@@ -308,9 +406,13 @@ const AdminPanel = ({ onClose, songToEdit, showToast }) => {
       setForm({
         titulo: songToEdit.titulo || '',
         tonoOriginal: songToEdit.tonoOriginal || songToEdit.tonalidad || 'G',
-        categoria: songToEdit.categoria || 'Ordinario',
+        categoria: songToEdit.categoria || '',
         autor: songToEdit.autor || '',
         cuerpo: songToEdit.cuerpo || '',
+      });
+    } else {
+      setForm({
+        titulo: '', tonoOriginal: 'G', categoria: '', autor: '', cuerpo: ''
       });
     }
   }, [songToEdit]);
@@ -346,8 +448,6 @@ const AdminPanel = ({ onClose, songToEdit, showToast }) => {
 
   return (
     <div className="fixed inset-0 z-[100] bg-white dark:bg-slate-950 flex flex-col animate-slide-up">
-
-      {/* Header */}
       <div className="flex items-center justify-between px-6 py-5 border-b border-slate-100 dark:border-slate-800 bg-white/95 dark:bg-slate-950/95 backdrop-blur-sm sticky top-0">
         <div>
           <h2 className="text-xl font-black text-slate-900 dark:text-white">
@@ -360,13 +460,11 @@ const AdminPanel = ({ onClose, songToEdit, showToast }) => {
         </button>
       </div>
 
-      {/* Formulario */}
       <form onSubmit={handleSave} className="flex-1 overflow-y-auto p-6 space-y-5">
-
         <div className="space-y-2">
           <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Título del canto</label>
           <input
-            className="w-full px-5 py-4 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl text-lg font-semibold outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all placeholder:text-slate-300 dark:placeholder:text-slate-600"
+            className="w-full px-5 py-4 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl text-lg font-semibold outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
             placeholder="Ej: Pescador de Hombres"
             value={form.titulo}
             onChange={e => setForm(f => ({ ...f, titulo: e.target.value }))}
@@ -376,9 +474,9 @@ const AdminPanel = ({ onClose, songToEdit, showToast }) => {
 
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-2">
-            <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Tono</label>
+            <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Tono original</label>
             <select
-              className="w-full px-4 py-4 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl text-base font-bold outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+              className="w-full px-4 py-4 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl text-base font-bold outline-none focus:ring-2 focus:ring-blue-500/20"
               value={form.tonoOriginal}
               onChange={e => setForm(f => ({ ...f, tonoOriginal: e.target.value }))}
             >
@@ -389,11 +487,12 @@ const AdminPanel = ({ onClose, songToEdit, showToast }) => {
           <div className="space-y-2">
             <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Categoría</label>
             <select
-              className="w-full px-4 py-4 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl text-base outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+              className="w-full px-4 py-4 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl text-base outline-none focus:ring-2 focus:ring-blue-500/20"
               value={form.categoria}
               onChange={e => setForm(f => ({ ...f, categoria: e.target.value }))}
             >
-              {CATEGORIAS.filter(c => c !== 'Todos').map(c => <option key={c} value={c}>{c}</option>)}
+              <option value="">Sin categoría</option>
+              {categorias.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
           </div>
         </div>
@@ -401,7 +500,7 @@ const AdminPanel = ({ onClose, songToEdit, showToast }) => {
         <div className="space-y-2">
           <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Autor / Compositor</label>
           <input
-            className="w-full px-5 py-3.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all placeholder:text-slate-300 dark:placeholder:text-slate-600"
+            className="w-full px-5 py-3.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl outline-none focus:ring-2 focus:ring-blue-500/20"
             placeholder="Opcional"
             value={form.autor}
             onChange={e => setForm(f => ({ ...f, autor: e.target.value }))}
@@ -412,19 +511,19 @@ const AdminPanel = ({ onClose, songToEdit, showToast }) => {
           <div className="flex items-center justify-between">
             <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Letra con acordes</label>
             <button type="button" onClick={insertChord}
-              className="text-xs font-bold text-blue-600 dark:text-blue-400 px-3 py-1.5 rounded-lg bg-blue-50 dark:bg-blue-900/30 hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors">
+              className="text-xs font-bold text-blue-600 dark:text-blue-400 px-3 py-1.5 rounded-lg bg-blue-50 dark:bg-blue-900/30 hover:bg-blue-100">
               + Insertar [acorde]
             </button>
           </div>
           <textarea
             ref={textareaRef}
-            className="w-full px-5 py-4 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl font-mono text-[13px] leading-7 outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all resize-none placeholder:text-slate-300 dark:placeholder:text-slate-600 min-h-[280px]"
-            placeholder={`[G]Señor mi [C]Dios, al contemplar los [D]cielos...\n[G]La luna, el [C]sol y las estre[D]llas...\n\nEstribillo:\n[Em]¡Cuán grande es [C]Él! ¡Cuán gran[G]de es Él!`}
+            className="w-full px-5 py-4 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl font-mono text-[13px] leading-7 outline-none focus:ring-2 focus:ring-blue-500/20 resize-none min-h-[280px]"
+            placeholder={`[G]Señor mi [C]Dios, al contemplar los [D]cielos...`}
             value={form.cuerpo}
             onChange={e => setForm(f => ({ ...f, cuerpo: e.target.value }))}
             required
           />
-          <p className="text-xs text-slate-400 dark:text-slate-600">
+          <p className="text-xs text-slate-400">
             Formato: <code className="bg-slate-100 dark:bg-slate-800 px-1 rounded">[G]</code> antes de la sílaba que lleva el acorde.
           </p>
         </div>
@@ -432,8 +531,7 @@ const AdminPanel = ({ onClose, songToEdit, showToast }) => {
         <button
           type="submit"
           disabled={saving || !form.titulo.trim() || !form.cuerpo.trim()}
-          className="w-full py-5 rounded-3xl font-black text-lg text-white transition-all disabled:opacity-40 disabled:cursor-not-allowed
-            bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-500/25 active:scale-[0.98]"
+          className="w-full py-5 rounded-3xl font-black text-lg text-white transition-all disabled:opacity-40 disabled:cursor-not-allowed bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-500/25 active:scale-[0.98]"
         >
           {saving ? 'Guardando...' : (songToEdit ? 'Actualizar canto' : 'Publicar canto')}
         </button>
@@ -443,9 +541,11 @@ const AdminPanel = ({ onClose, songToEdit, showToast }) => {
 };
 
 // ─── Lista de Cantos ─────────────────────────────────────────────────────────
-const SongList = ({ songs, onSelect }) => {
+const SongList = ({ songs, onSelect, categorias }) => {
   const [query, setQuery] = useState('');
   const [cat, setCat] = useState('Todos');
+
+  const allCategories = ['Todos', ...categorias];
 
   const filtered = songs.filter(s => {
     const q = query.toLowerCase();
@@ -454,7 +554,7 @@ const SongList = ({ songs, onSelect }) => {
     return matchQ && matchC;
   });
 
-  const grouped = CATEGORIAS.filter(c => c !== 'Todos').reduce((acc, c) => {
+  const grouped = categorias.reduce((acc, c) => {
     const items = filtered.filter(s => s.categoria === c);
     if (items.length) acc[c] = items;
     return acc;
@@ -464,39 +564,35 @@ const SongList = ({ songs, onSelect }) => {
 
   return (
     <div className="space-y-5 animate-fade-in">
-
-      {/* Buscador */}
       <div className="relative group">
         <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500 transition-colors pointer-events-none" size={20} />
         <input
           type="text"
-          className="w-full pl-14 pr-5 py-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all text-base placeholder:text-slate-400 dark:placeholder:text-slate-600"
+          className="w-full pl-14 pr-5 py-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all"
           placeholder="Busca por título o autor..."
           value={query}
           onChange={e => setQuery(e.target.value)}
         />
         {query && (
-          <button onClick={() => setQuery('')} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors">
+          <button onClick={() => setQuery('')} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
             <X size={16} />
           </button>
         )}
       </div>
 
-      {/* Filtros de categoría */}
       <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-none -mx-1 px-1">
-        {CATEGORIAS.map(c => (
+        {allCategories.map(c => (
           <button key={c} onClick={() => setCat(c)}
             className={`whitespace-nowrap px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wide transition-all shrink-0
               ${cat === c
                 ? 'bg-blue-600 text-white shadow-md shadow-blue-500/25'
-                : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 hover:border-blue-300 dark:hover:border-blue-700'
+                : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 hover:border-blue-300'
               }`}>
             {c}
           </button>
         ))}
       </div>
 
-      {/* Resultados */}
       {showGrouped ? (
         <div className="space-y-7">
           {Object.entries(grouped).map(([category, items]) => (
@@ -515,7 +611,7 @@ const SongList = ({ songs, onSelect }) => {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {filtered.map(song => <SongCard key={song.id} song={song} onSelect={onSelect} />)}
-          {filtered.length === 0 && <div className="col-span-full"><EmptyState query={query} /></div>}
+          {filtered.length === 0 && <EmptyState query={query} />}
         </div>
       )}
     </div>
@@ -527,10 +623,7 @@ const SongCard = ({ song, onSelect }) => (
   <button onClick={() => onSelect(song)}
     className="group relative w-full text-left p-5 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-[1.5rem]
       hover:border-blue-300 dark:hover:border-blue-700 hover:shadow-lg hover:shadow-blue-500/5 active:scale-[0.98] transition-all overflow-hidden">
-    
-    {/* Icono decorativo */}
     <Music className="absolute -bottom-4 -right-4 text-slate-50 dark:text-slate-800/50 group-hover:text-blue-50 dark:group-hover:text-blue-950 transition-colors duration-500 group-hover:scale-110" size={80} />
-    
     <div className="relative flex justify-between items-start gap-3">
       <div className="space-y-2 min-w-0">
         <CatBadge cat={song.categoria} small />
@@ -539,13 +632,9 @@ const SongCard = ({ song, onSelect }) => (
         </h3>
         <div className="flex items-center gap-3 text-[11px] font-semibold text-slate-400 dark:text-slate-500">
           {(song.tonoOriginal || song.tonalidad) && (
-            <span className="flex items-center gap-1">
-              <Music2 size={11} /> {song.tonoOriginal || song.tonalidad}
-            </span>
+            <span className="flex items-center gap-1"><Music2 size={11} /> {song.tonoOriginal || song.tonalidad}</span>
           )}
-          {song.autor && (
-            <span className="truncate">{song.autor}</span>
-          )}
+          {song.autor && <span className="truncate">{song.autor}</span>}
         </div>
       </div>
       <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 group-hover:bg-blue-600 group-hover:text-white transition-all shrink-0 shadow-sm">
@@ -581,13 +670,15 @@ export default function App() {
     window.matchMedia?.('(prefers-color-scheme: dark)').matches
   );
   const [toast, setToast] = useState(null);
+  const [categorias, setCategorias] = useState([]);
+  const [showCategoryManager, setShowCategoryManager] = useState(false);
 
   // Dark mode
   useEffect(() => {
     document.documentElement.classList.toggle('dark', isDark);
   }, [isDark]);
 
-  // Firebase: carga en tiempo real
+  // Firebase: carga de cantos
   useEffect(() => {
     const cantosRef = ref(db, 'cantos');
     const unsubscribe = onValue(cantosRef, (snapshot) => {
@@ -600,6 +691,29 @@ export default function App() {
       setSongs(list);
       setLoading(false);
     }, () => setLoading(false));
+    return () => unsubscribe();
+  }, []);
+
+  // Firebase: carga de categorías (SIN categorías por defecto)
+  useEffect(() => {
+    const categoriasRef = ref(db, 'categorias');
+    const unsubscribe = onValue(categoriasRef, (snapshot) => {
+      const data = snapshot.val();
+      
+      if (data !== null && data !== undefined && Array.isArray(data)) {
+        // Usar las categorías existentes (puede ser array vacío)
+        setCategorias(data);
+      } else if (data !== null && data !== undefined && data.lista && Array.isArray(data.lista)) {
+        setCategorias(data.lista);
+      } else {
+        // Sin categorías por defecto - array vacío
+        setCategorias([]);
+        // Solo crear el nodo si no existe
+        if (data === null || data === undefined) {
+          set(ref(db, 'categorias'), []);
+        }
+      }
+    });
     return () => unsubscribe();
   }, []);
 
@@ -618,10 +732,48 @@ export default function App() {
     setSongToEdit(null);
   }, []);
 
+  const agregarCategoria = (nueva) => {
+    if (nueva.trim() && !categorias.includes(nueva.trim())) {
+      const nuevas = [...categorias, nueva.trim()];
+      setCategorias(nuevas);
+      set(ref(db, 'categorias'), nuevas);
+    }
+  };
+
+  const editarCategoria = (vieja, nueva) => {
+    if (nueva.trim() && !categorias.includes(nueva.trim())) {
+      const index = categorias.indexOf(vieja);
+      if (index !== -1) {
+        const nuevas = [...categorias];
+        nuevas[index] = nueva.trim();
+        setCategorias(nuevas);
+        set(ref(db, 'categorias'), nuevas);
+        
+        songs.forEach(song => {
+          if (song.categoria === vieja) {
+            set(ref(db, `cantos/${song.id}/categoria`), nueva.trim());
+          }
+        });
+      }
+    }
+  };
+
+  const eliminarCategoria = (cat) => {
+    if (window.confirm(`¿Eliminar categoría "${cat}"? Los cantos con esta categoría pasarán a "Sin categoría".`)) {
+      const nuevas = categorias.filter(c => c !== cat);
+      setCategorias(nuevas);
+      set(ref(db, 'categorias'), nuevas);
+      
+      songs.forEach(song => {
+        if (song.categoria === cat) {
+          set(ref(db, `cantos/${song.id}/categoria`), '');
+        }
+      });
+    }
+  };
+
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 transition-colors duration-300">
-
-      {/* Toast */}
       {toast && (
         <Toast
           key={toast.key}
@@ -631,20 +783,29 @@ export default function App() {
         />
       )}
 
-      {/* Panel admin */}
-  {showAdmin && (
-  <AdminPanel 
-    onClose={closeAdmin}
-    songToEdit={songToEdit}
-    showToast={showToast}  // ← Esto está bien
-  />
-)}
+      {showAdmin && (
+        <AdminPanel 
+          onClose={closeAdmin}
+          songToEdit={songToEdit}
+          showToast={showToast}
+          categorias={categorias}
+        />
+      )}
 
-      {/* Header */}
+      {showCategoryManager && (
+        <CategoryManager
+          categorias={categorias}
+          onAdd={agregarCategoria}
+          onEdit={editarCategoria}
+          onDelete={eliminarCategoria}
+          onClose={() => setShowCategoryManager(false)}
+        />
+      )}
+
+      <InstallButton />
+
       <header className="sticky top-0 z-40 border-b border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-950/80 backdrop-blur-xl">
         <div className="max-w-5xl mx-auto px-5 py-4 flex items-center justify-between">
-
-          {/* Logo */}
           <div className="flex items-center gap-3">
             <div className="relative">
               <div className="w-10 h-10 bg-blue-600 rounded-[12px] flex items-center justify-center shadow-lg shadow-blue-600/30">
@@ -662,11 +823,17 @@ export default function App() {
             </div>
           </div>
 
-          {/* Acciones */}
           <div className="flex items-center gap-2">
             <button onClick={() => setIsDark(d => !d)}
               className="p-2.5 rounded-xl bg-slate-100 dark:bg-slate-900 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors">
               {isDark ? <Sun size={18} /> : <Moon size={18} />}
+            </button>
+            <button 
+              onClick={() => setShowCategoryManager(true)}
+              className="p-2.5 rounded-xl bg-slate-100 dark:bg-slate-900 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors"
+              title="Gestionar categorías"
+            >
+              📂
             </button>
             <button
               onClick={() => { setSongToEdit(null); setShowAdmin(true); }}
@@ -678,7 +845,6 @@ export default function App() {
         </div>
       </header>
 
-      {/* Contenido */}
       <main className="max-w-5xl mx-auto px-4 md:px-8 py-7">
         {loading ? (
           <div className="flex flex-col items-center justify-center py-32 gap-4">
@@ -695,10 +861,9 @@ export default function App() {
             showToast={showToast}
           />
         ) : (
-          <SongList songs={songs} onSelect={setSelectedSong} />
+          <SongList songs={songs} onSelect={setSelectedSong} categorias={categorias} />
         )}
       </main>
-
     </div>
   );
 }
