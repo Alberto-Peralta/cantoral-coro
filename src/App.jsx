@@ -11,12 +11,24 @@ import { transponerAcorde } from './utils/transposer';
 // ─── Constantes ────────────────────────────────────────────────────────────
 const TONOS = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 const CAT_COLOR = {
-  Entrada:   { bg: 'bg-amber-50 dark:bg-amber-900/30',   text: 'text-amber-700 dark:text-amber-300' },
-  Ordinario: { bg: 'bg-blue-50 dark:bg-blue-900/30',    text: 'text-blue-700 dark:text-blue-300' },
-  Comunión:  { bg: 'bg-violet-50 dark:bg-violet-900/30', text: 'text-violet-700 dark:text-violet-300' },
-  Ofertorio: { bg: 'bg-emerald-50 dark:bg-emerald-900/30',text: 'text-emerald-700 dark:text-emerald-300' },
-  Salida:    { bg: 'bg-rose-50 dark:bg-rose-900/30',     text: 'text-rose-700 dark:text-rose-300' },
-  Mariano:   { bg: 'bg-sky-50 dark:bg-sky-900/30',       text: 'text-sky-700 dark:text-sky-300' },
+  Entrada:       { bg: 'bg-amber-50 dark:bg-amber-900/30',    text: 'text-amber-700 dark:text-amber-300' },
+  Ordinario:     { bg: 'bg-blue-50 dark:bg-blue-900/30',      text: 'text-blue-700 dark:text-blue-300' },
+  Comunión:      { bg: 'bg-violet-50 dark:bg-violet-900/30',  text: 'text-violet-700 dark:text-violet-300' },
+  Ofertorio:     { bg: 'bg-emerald-50 dark:bg-emerald-900/30',text: 'text-emerald-700 dark:text-emerald-300' },
+  Salida:        { bg: 'bg-rose-50 dark:bg-rose-900/30',      text: 'text-rose-700 dark:text-rose-300' },
+  Mariano:       { bg: 'bg-sky-50 dark:bg-sky-900/30',        text: 'text-sky-700 dark:text-sky-300' },
+  Santo:         { bg: 'bg-yellow-50 dark:bg-yellow-900/30',  text: 'text-yellow-700 dark:text-yellow-300' },
+  Cordero:       { bg: 'bg-orange-50 dark:bg-orange-900/30',  text: 'text-orange-700 dark:text-orange-300' },
+  Navidad:       { bg: 'bg-red-50 dark:bg-red-900/30',        text: 'text-red-700 dark:text-red-300' },
+  Cuaresma:      { bg: 'bg-purple-50 dark:bg-purple-900/30',  text: 'text-purple-700 dark:text-purple-300' },
+  'Semana Santa':{ bg: 'bg-purple-50 dark:bg-purple-900/30',  text: 'text-purple-700 dark:text-purple-300' },
+  Pascua:        { bg: 'bg-lime-50 dark:bg-lime-900/30',      text: 'text-lime-700 dark:text-lime-300' },
+  'Cristo Rey':  { bg: 'bg-amber-50 dark:bg-amber-900/30',    text: 'text-amber-700 dark:text-amber-300' },
+  'Espíritu Santo':{ bg: 'bg-orange-50 dark:bg-orange-900/30',text: 'text-orange-700 dark:text-orange-300' },
+  Adoración:     { bg: 'bg-indigo-50 dark:bg-indigo-900/30',  text: 'text-indigo-700 dark:text-indigo-300' },
+  Vocacional:    { bg: 'bg-teal-50 dark:bg-teal-900/30',      text: 'text-teal-700 dark:text-teal-300' },
+  Alabanza:      { bg: 'bg-pink-50 dark:bg-pink-900/30',      text: 'text-pink-700 dark:text-pink-300' },
+  Adviento:      { bg: 'bg-violet-50 dark:bg-violet-900/30',  text: 'text-violet-700 dark:text-violet-300' },
 };
 const DEFAULT_CAT = { bg: 'bg-slate-100 dark:bg-slate-800', text: 'text-slate-500 dark:text-slate-400' };
 
@@ -31,7 +43,6 @@ const InstallButton = () => {
       setDeferredPrompt(e);
       setShowInstall(true);
     };
-
     window.addEventListener('beforeinstallprompt', handler);
     return () => window.removeEventListener('beforeinstallprompt', handler);
   }, []);
@@ -40,9 +51,7 @@ const InstallButton = () => {
     if (!deferredPrompt) return;
     deferredPrompt.prompt();
     const { outcome } = await deferredPrompt.userChoice;
-    if (outcome === 'accepted') {
-      console.log('Usuario instaló la app');
-    }
+    if (outcome === 'accepted') console.log('Usuario instaló la app');
     setDeferredPrompt(null);
     setShowInstall(false);
   };
@@ -90,47 +99,47 @@ const CatBadge = ({ cat, small = false }) => {
 // ─── Procesador de acordes ──────────────────────────────────────────────────
 const ProcesarLetra = ({ texto, transporte, fontSize }) => {
   if (!texto) return null;
-  
+
   const procesarLinea = (linea, numLinea) => {
     const acordes = [];
     let textoLimpio = linea;
     const regex = /\[([^\]]+)\]/g;
     let match;
     let offset = 0;
-    
+
     while ((match = regex.exec(linea)) !== null) {
       const acordeOriginal = match[1];
       const acordeTranspuesto = transponerAcorde(acordeOriginal, transporte);
       const posicion = match.index - offset;
-      
-      acordes.push({
-        acorde: acordeTranspuesto,
-        posicion: posicion,
-        original: match[0]
-      });
-      
+
+      acordes.push({ acorde: acordeTranspuesto, posicion, original: match[0] });
+
       const espacios = ' '.repeat(match[0].length);
-      textoLimpio = textoLimpio.slice(0, match.index - offset) + espacios + textoLimpio.slice(match.index - offset + match[0].length);
+      textoLimpio =
+        textoLimpio.slice(0, match.index - offset) +
+        espacios +
+        textoLimpio.slice(match.index - offset + match[0].length);
       offset += match[0].length - espacios.length;
     }
-    
+
     if (acordes.length === 0) {
       return <div key={numLinea} className="leading-loose">{linea}</div>;
     }
-    
+
     let lineaAcordes = '';
     let ultimaPos = 0;
-    
     for (const acorde of acordes) {
-      const espaciosNecesarios = acorde.posicion - ultimaPos;
-      lineaAcordes += ' '.repeat(Math.max(0, espaciosNecesarios));
+      lineaAcordes += ' '.repeat(Math.max(0, acorde.posicion - ultimaPos));
       lineaAcordes += acorde.acorde;
       ultimaPos = acorde.posicion + acorde.acorde.length;
     }
-    
+
     return (
       <div key={numLinea} className="relative my-3" style={{ minHeight: `${fontSize * 1.5}px` }}>
-        <div className="text-blue-600 dark:text-blue-400 font-bold absolute -top-4 left-0 whitespace-pre font-mono" style={{ fontSize: `${fontSize * 0.7}px`, letterSpacing: '0.5px' }}>
+        <div
+          className="text-blue-600 dark:text-blue-400 font-bold absolute -top-4 left-0 whitespace-pre font-mono"
+          style={{ fontSize: `${fontSize * 0.7}px`, letterSpacing: '0.5px' }}
+        >
           {lineaAcordes}
         </div>
         <div className="text-slate-700 dark:text-slate-300 font-mono whitespace-pre-wrap pt-3">
@@ -139,9 +148,8 @@ const ProcesarLetra = ({ texto, transporte, fontSize }) => {
       </div>
     );
   };
-  
+
   const lineas = texto.split('\n');
-  
   return (
     <div style={{ fontSize: `${fontSize}px` }} className="leading-normal">
       {lineas.map((linea, idx) => procesarLinea(linea, idx))}
@@ -186,7 +194,7 @@ const CategoryManager = ({ categorias, onAdd, onEdit, onDelete, onClose }) => {
           </div>
           <button onClick={onClose} className="text-slate-400 text-xl">✕</button>
         </div>
-        
+
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
           <div className="space-y-2">
             {categorias.length === 0 ? (
@@ -226,7 +234,7 @@ const CategoryManager = ({ categorias, onAdd, onEdit, onDelete, onClose }) => {
               ))
             )}
           </div>
-          
+
           <div className="pt-4 border-t border-slate-200 dark:border-slate-800">
             <p className="text-sm font-medium mb-2">➕ Agregar nueva categoría</p>
             <div className="flex gap-2">
@@ -238,7 +246,12 @@ const CategoryManager = ({ categorias, onAdd, onEdit, onDelete, onClose }) => {
                 className="flex-1 px-4 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-blue-500/20"
                 onKeyPress={(e) => e.key === 'Enter' && nueva.trim() && onAdd(nueva) && setNueva('')}
               />
-              <button onClick={() => { if (nueva.trim()) onAdd(nueva); setNueva(''); }} className="px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition">Agregar</button>
+              <button
+                onClick={() => { if (nueva.trim()) onAdd(nueva); setNueva(''); }}
+                className="px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition"
+              >
+                Agregar
+              </button>
             </div>
           </div>
         </div>
@@ -411,9 +424,7 @@ const AdminPanel = ({ onClose, songToEdit, showToast, categorias }) => {
         cuerpo: songToEdit.cuerpo || '',
       });
     } else {
-      setForm({
-        titulo: '', tonoOriginal: 'G', categoria: '', autor: '', cuerpo: ''
-      });
+      setForm({ titulo: '', tonoOriginal: 'G', categoria: '', autor: '', cuerpo: '' });
     }
   }, [songToEdit]);
 
@@ -541,11 +552,18 @@ const AdminPanel = ({ onClose, songToEdit, showToast, categorias }) => {
 };
 
 // ─── Lista de Cantos ─────────────────────────────────────────────────────────
+// FIX: ahora detecta categorías que existen en los cantos aunque no estén
+//      registradas en el array de Firebase, y las muestra correctamente.
 const SongList = ({ songs, onSelect, categorias }) => {
   const [query, setQuery] = useState('');
   const [cat, setCat] = useState('Todos');
 
-  const allCategories = ['Todos', ...categorias];
+  // Categorías que realmente tienen cantos (incluye las migradas sin registrar)
+  const categoriasEnCantos = [...new Set(songs.map(s => s.categoria).filter(Boolean))];
+  // Unión sin duplicados: primero las registradas (conservan orden), luego las huérfanas
+  const todasLasCategorias = [...new Set([...categorias, ...categoriasEnCantos])];
+
+  const allCategories = ['Todos', ...todasLasCategorias];
 
   const filtered = songs.filter(s => {
     const q = query.toLowerCase();
@@ -554,11 +572,15 @@ const SongList = ({ songs, onSelect, categorias }) => {
     return matchQ && matchC;
   });
 
-  const grouped = categorias.reduce((acc, c) => {
+  // Agrupa usando todasLasCategorias (no solo las de Firebase)
+  const grouped = todasLasCategorias.reduce((acc, c) => {
     const items = filtered.filter(s => s.categoria === c);
     if (items.length) acc[c] = items;
     return acc;
   }, {});
+
+  // Cantos sin categoría (campo vacío o nulo)
+  const sinClasificar = filtered.filter(s => !s.categoria);
 
   const showGrouped = cat === 'Todos' && !query;
 
@@ -606,7 +628,25 @@ const SongList = ({ songs, onSelect, categorias }) => {
               </div>
             </div>
           ))}
-          {Object.keys(grouped).length === 0 && <EmptyState query={query} />}
+
+          {/* Cantos sin categoría asignada */}
+          {sinClasificar.length > 0 && (
+            <div>
+              <div className="flex items-center gap-3 mb-3">
+                <span className="inline-block rounded-lg font-bold uppercase tracking-widest text-[10px] px-2.5 py-1 bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">
+                  Sin categoría
+                </span>
+                <span className="text-xs text-slate-400 font-semibold">{sinClasificar.length} cantos</span>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {sinClasificar.map(song => <SongCard key={song.id} song={song} onSelect={onSelect} />)}
+              </div>
+            </div>
+          )}
+
+          {Object.keys(grouped).length === 0 && sinClasificar.length === 0 && (
+            <EmptyState query={query} />
+          )}
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -678,7 +718,9 @@ export default function App() {
     document.documentElement.classList.toggle('dark', isDark);
   }, [isDark]);
 
-  // Firebase: carga de cantos
+  // Firebase: carga de cantos + sincronización automática de categorías
+  // FIX: al cargar los cantos, detecta categorías que existen en los datos
+  //      pero no están en el array /categorias de Firebase, y las agrega.
   useEffect(() => {
     const cantosRef = ref(db, 'cantos');
     const unsubscribe = onValue(cantosRef, (snapshot) => {
@@ -690,25 +732,34 @@ export default function App() {
         : [];
       setSongs(list);
       setLoading(false);
+
+      // Sincronizar: agrega al array de Firebase las categorías que viven
+      // en los cantos pero no están registradas todavía.
+      setCategorias(prev => {
+        const enCantos = [...new Set(list.map(s => s.categoria).filter(Boolean))];
+        const nuevas = enCantos.filter(c => !prev.includes(c));
+        if (nuevas.length > 0) {
+          const merged = [...prev, ...nuevas];
+          set(ref(db, 'categorias'), merged);
+          return merged;
+        }
+        return prev;
+      });
     }, () => setLoading(false));
     return () => unsubscribe();
   }, []);
 
-  // Firebase: carga de categorías (SIN categorías por defecto)
+  // Firebase: carga de categorías
   useEffect(() => {
     const categoriasRef = ref(db, 'categorias');
     const unsubscribe = onValue(categoriasRef, (snapshot) => {
       const data = snapshot.val();
-      
       if (data !== null && data !== undefined && Array.isArray(data)) {
-        // Usar las categorías existentes (puede ser array vacío)
         setCategorias(data);
       } else if (data !== null && data !== undefined && data.lista && Array.isArray(data.lista)) {
         setCategorias(data.lista);
       } else {
-        // Sin categorías por defecto - array vacío
         setCategorias([]);
-        // Solo crear el nodo si no existe
         if (data === null || data === undefined) {
           set(ref(db, 'categorias'), []);
         }
@@ -748,7 +799,6 @@ export default function App() {
         nuevas[index] = nueva.trim();
         setCategorias(nuevas);
         set(ref(db, 'categorias'), nuevas);
-        
         songs.forEach(song => {
           if (song.categoria === vieja) {
             set(ref(db, `cantos/${song.id}/categoria`), nueva.trim());
@@ -763,7 +813,6 @@ export default function App() {
       const nuevas = categorias.filter(c => c !== cat);
       setCategorias(nuevas);
       set(ref(db, 'categorias'), nuevas);
-      
       songs.forEach(song => {
         if (song.categoria === cat) {
           set(ref(db, `cantos/${song.id}/categoria`), '');
@@ -784,7 +833,7 @@ export default function App() {
       )}
 
       {showAdmin && (
-        <AdminPanel 
+        <AdminPanel
           onClose={closeAdmin}
           songToEdit={songToEdit}
           showToast={showToast}
@@ -828,7 +877,7 @@ export default function App() {
               className="p-2.5 rounded-xl bg-slate-100 dark:bg-slate-900 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors">
               {isDark ? <Sun size={18} /> : <Moon size={18} />}
             </button>
-            <button 
+            <button
               onClick={() => setShowCategoryManager(true)}
               className="p-2.5 rounded-xl bg-slate-100 dark:bg-slate-900 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors"
               title="Gestionar categorías"
