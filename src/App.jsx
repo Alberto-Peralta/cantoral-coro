@@ -126,6 +126,15 @@ const CAT_META = {
     icon: '🕯️',
     desc: 'Tiempo de espera'
   },
+
+   kyre: {
+    img: '/categorias/kyre.jpg',
+    color: 'from-violet-900/40 to-violet-700/20',
+    accent: '#8b5cf6',
+    icon: '🕯️',
+    desc: 'Ten piedad'
+  },
+
 };
 
 const DEFAULT_META = {
