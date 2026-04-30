@@ -3,10 +3,11 @@ import {
   Search, Plus, Music, ChevronRight, ArrowLeft,
   Minus, Plus as PlusIcon, Type, Sun, Moon, Share2,
   Trash2, Pencil, BookOpen, X, Check, AlertCircle,
-  Music2, Bookmark, Download, Grid3X3, List
+  Music2, Bookmark, Download
 } from 'lucide-react';
 import { db, ref, onValue, push, set } from './firebase';
 import { transponerAcorde } from './utils/transposer';
+import ShareModal from './components/ShareModal';
 
 // ─── Constantes ────────────────────────────────────────────────────────────
 const TONOS = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
@@ -204,34 +205,27 @@ const InstallButton = () => {
 };
 
 // ─── Procesar Letra ──────────────────────────────────────────────────────────
-// Cada [Acorde] flota encima de su sílaba con position:relative,
-// sin desplazar ni romper el texto.
 const ProcesarLetra = ({ texto, transporte, fontSize }) => {
   const acordeSize = Math.round(fontSize * 0.72);
 
   const procesarLinea = (linea, numLinea) => {
-    // Separar la línea en partes: texto plano o [Acorde]texto
     const partes = [];
     const regex = /\[([^\]]+)\]/g;
     let lastIndex = 0;
     let match;
 
     while ((match = regex.exec(linea)) !== null) {
-      // Texto antes del acorde
       if (match.index > lastIndex) {
         partes.push({ tipo: 'texto', valor: linea.slice(lastIndex, match.index) });
       }
-      // El acorde con el texto que lo sigue (hasta el próximo acorde o fin)
       const acorde = transponerAcorde(match[1], transporte);
       partes.push({ tipo: 'acorde', acorde, valor: '' });
       lastIndex = match.index + match[0].length;
     }
-    // Texto restante al final
     if (lastIndex < linea.length) {
       partes.push({ tipo: 'texto', valor: linea.slice(lastIndex) });
     }
 
-    // Si no hay acordes, línea simple
     if (!partes.some(p => p.tipo === 'acorde')) {
       return (
         <div key={numLinea} className="text-slate-700 dark:text-slate-300 leading-loose">
@@ -240,22 +234,18 @@ const ProcesarLetra = ({ texto, transporte, fontSize }) => {
       );
     }
 
-    // Agrupar: cada acorde se ancla al PRIMER CARÁCTER que le sigue
-    // (aunque sea espacio). El resto del texto queda como fragmento libre.
     const grupos = [];
     for (let i = 0; i < partes.length; i++) {
       const p = partes[i];
       if (p.tipo === 'acorde') {
         const siguiente = partes[i + 1];
         if (siguiente?.tipo === 'texto' && siguiente.valor.length > 0) {
-          // Anclar al primer carácter, dejar el resto suelto
           const ancla = siguiente.valor[0];
           const resto = siguiente.valor.slice(1);
           grupos.push({ acorde: p.acorde, ancla });
           if (resto) grupos.push({ acorde: null, texto: resto });
-          i++; // consumimos el texto siguiente
+          i++;
         } else {
-          // No hay texto después: usar espacio no-rompible como ancla
           grupos.push({ acorde: p.acorde, ancla: '\u00A0' });
         }
       } else {
@@ -275,14 +265,12 @@ const ProcesarLetra = ({ texto, transporte, fontSize }) => {
           }
           return (
             <span key={i} className="relative inline-block" style={{ paddingTop: `${acordeSize + 2}px`, marginTop: `-${acordeSize + 2}px` }}>
-              {/* Acorde flotando encima del primer carácter */}
               <span
                 className="absolute left-0 top-0 text-blue-600 dark:text-blue-400 font-black whitespace-nowrap leading-none"
                 style={{ fontSize: `${acordeSize}px` }}
               >
                 {g.acorde}
               </span>
-              {/* Carácter ancla */}
               <span className="text-slate-700 dark:text-slate-300">{g.ancla}</span>
             </span>
           );
@@ -373,19 +361,29 @@ const SongDetail = ({ song, onBack, onEdit, showToast }) => {
   const [fontSize, setFontSize] = useState(17);
   const [transpose, setTranspose] = useState(0);
   const [showConfirm, setShowConfirm] = useState(false);
+  const [showShareModal, setShowShareModal] = useState(false);
+
   const handleDelete = () => {
     set(ref(db, `cantos/${song.id}`), null)
       .then(() => { showToast('Canto eliminado', 'success'); onBack(); })
       .catch(() => showToast('Error al eliminar', 'error'));
   };
+
   const handleShare = async () => {
-    const text = `🎵 ${song.titulo}\nTono: ${song.tonoOriginal || 'N/A'}\n\n${song.cuerpo || ''}`;
-    if (navigator.share) await navigator.share({ title: song.titulo, text }).catch(() => {});
-    else if (navigator.clipboard) { await navigator.clipboard.writeText(text); showToast('Copiado al portapapeles', 'success'); }
+    const text = `🎵 ${song.titulo}\nTono: ${song.tonoOriginal || 'N/A'}\n\n${song.cuerpo?.replace(/\[([^\]]+)\]/g, '$1') || ''}`;
+    if (navigator.share) {
+      await navigator.share({ title: song.titulo, text }).catch(() => {});
+    } else if (navigator.clipboard) {
+      await navigator.clipboard.writeText(text);
+      showToast('Copiado al portapapeles', 'success');
+    }
   };
+
   return (
     <>
       {showConfirm && <ConfirmModal title="¿Eliminar canto?" message={`"${song.titulo}" se eliminará permanentemente.`} onConfirm={handleDelete} onCancel={() => setShowConfirm(false)} />}
+      {showShareModal && <ShareModal song={song} onClose={() => setShowShareModal(false)} transpose={transpose} />}
+      
       <div className="max-w-3xl mx-auto pb-36 animate-fade-in">
         <div className="flex items-center justify-between mb-6">
           <button onClick={onBack} className="flex items-center gap-2 text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 font-bold transition-colors group">
@@ -395,6 +393,7 @@ const SongDetail = ({ song, onBack, onEdit, showToast }) => {
           <div className="flex items-center gap-2">
             <button onClick={() => onEdit(song)} className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 shadow-sm text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 transition-all"><Pencil size={17} /></button>
             <button onClick={() => setShowConfirm(true)} className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 shadow-sm text-slate-500 dark:text-slate-400 hover:text-red-600 dark:hover:text-red-400 transition-all"><Trash2 size={17} /></button>
+            <button onClick={() => setShowShareModal(true)} className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 shadow-sm text-slate-500 dark:text-slate-400 hover:text-green-600 dark:hover:text-green-400 transition-all"><Share2 size={17} /></button>
           </div>
         </div>
         <div className="bg-white dark:bg-slate-900 rounded-[2rem] border border-slate-100 dark:border-slate-800 shadow-xl overflow-hidden">
@@ -562,7 +561,6 @@ const CategorySongList = ({ categoria, songs, onSelect, onBack }) => {
 
   return (
     <div className="animate-fade-in">
-      {/* Hero de categoría */}
       <div className="relative -mx-4 md:-mx-8 -mt-7 mb-8 h-44 overflow-hidden">
         <img src={meta.img} alt={categoria} className="w-full h-full object-cover" />
         <div className={`absolute inset-0 bg-gradient-to-r ${meta.color}`} />
@@ -584,7 +582,6 @@ const CategorySongList = ({ categoria, songs, onSelect, onBack }) => {
         </div>
       </div>
 
-      {/* Buscador */}
       <div className="relative group mb-5">
         <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500 transition-colors pointer-events-none" size={18} />
         <input type="text"
@@ -594,7 +591,6 @@ const CategorySongList = ({ categoria, songs, onSelect, onBack }) => {
         {query && <button onClick={() => setQuery('')} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"><X size={14} /></button>}
       </div>
 
-      {/* Lista */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         {filtered.map(song => <SongCard key={song.id} song={song} onSelect={onSelect} />)}
         {filtered.length === 0 && (
@@ -610,23 +606,16 @@ const CategorySongList = ({ categoria, songs, onSelect, onBack }) => {
 // ─── PANTALLA: Home con grid de categorías ────────────────────────────────────
 const CategoryHome = ({ songs, categorias, onSelectCategory, onSelectSong }) => {
   const [query, setQuery] = useState('');
-
-  // Categorías que tienen cantos
   const categoriasConCantos = [...new Set(songs.map(s => s.categoria).filter(Boolean))];
   const todasCategorias = [...new Set([...categorias, ...categoriasConCantos])];
-
-  // Contar cantos por categoría
   const countByCat = {};
   songs.forEach(s => { if (s.categoria) countByCat[s.categoria] = (countByCat[s.categoria] || 0) + 1; });
-
-  // Si hay búsqueda activa, mostrar resultados planos
   const searchResults = query
     ? songs.filter(s => s.titulo?.toLowerCase().includes(query.toLowerCase()) || s.autor?.toLowerCase().includes(query.toLowerCase()))
     : [];
 
   return (
     <div className="space-y-6 animate-fade-in">
-      {/* Buscador global */}
       <div className="relative group">
         <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500 transition-colors pointer-events-none" size={20} />
         <input type="text"
@@ -636,7 +625,6 @@ const CategoryHome = ({ songs, categorias, onSelectCategory, onSelectSong }) => 
         {query && <button onClick={() => setQuery('')} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"><X size={16} /></button>}
       </div>
 
-      {/* Resultados de búsqueda */}
       {query ? (
         <div>
           <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">{searchResults.length} resultado{searchResults.length !== 1 ? 's' : ''}</p>
@@ -660,21 +648,15 @@ const CategoryHome = ({ songs, categorias, onSelectCategory, onSelectSong }) => 
                 return (
                   <button key={cat} onClick={() => onSelectCategory(cat)}
                     className="group relative rounded-2xl overflow-hidden aspect-[4/3] shadow-sm hover:shadow-lg active:scale-[0.97] transition-all duration-200 bg-slate-100 dark:bg-slate-800">
-                    {/* Imagen de fondo */}
                     <img src={meta.img} alt={cat} className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
-                    {/* Overlay suave solo en la parte inferior para leer el texto */}
                     <div className="absolute inset-0 bg-gradient-to-t from-black/55 via-black/10 to-transparent" />
-                    {/* Contenido */}
                     <div className="absolute inset-0 p-3.5 flex flex-col justify-between">
-                      <div className="flex justify-end">
-                        <span className="text-xl leading-none drop-shadow">{meta.icon}</span>
-                      </div>
+                      <div className="flex justify-end"><span className="text-xl leading-none drop-shadow">{meta.icon}</span></div>
                       <div>
                         <p className="text-white font-black text-sm leading-tight tracking-tight drop-shadow">{cat}</p>
                         <p className="text-white/70 text-[10px] font-semibold mt-0.5">{count} canto{count !== 1 ? 's' : ''}</p>
                       </div>
                     </div>
-                    {/* Borde de acento al hover */}
                     <div className="absolute inset-0 rounded-2xl border-2 border-transparent group-hover:border-white/20 transition-colors" />
                   </button>
                 );
@@ -682,7 +664,6 @@ const CategoryHome = ({ songs, categorias, onSelectCategory, onSelectSong }) => 
             </div>
           </div>
 
-          {/* Cantos sin categoría */}
           {songs.filter(s => !s.categoria).length > 0 && (
             <div>
               <h2 className="text-xs font-black text-slate-400 uppercase tracking-[0.15em] mb-3">Sin categoría</h2>
@@ -756,7 +737,6 @@ export default function App() {
     }
   };
 
-  // Cantos de la categoría seleccionada
   const songsByCategory = selectedCategory ? songs.filter(s => s.categoria === selectedCategory) : [];
 
   return (
@@ -766,7 +746,6 @@ export default function App() {
       {showCategoryManager && <CategoryManager categorias={categorias} onAdd={agregarCategoria} onEdit={editarCategoria} onDelete={eliminarCategoria} onClose={() => setShowCategoryManager(false)} />}
       <InstallButton />
 
-      {/* Header */}
       <header className="sticky top-0 z-40 border-b border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-950/80 backdrop-blur-xl">
         <div className="max-w-5xl mx-auto px-5 py-4 flex items-center justify-between">
           <button

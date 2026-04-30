@@ -73,3 +73,10 @@ code {
 select {
   color-scheme: light dark;
 }
+
+/* Para la vista previa de compartir */
+.share-preview pre {
+  font-family: 'Courier New', monospace;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
